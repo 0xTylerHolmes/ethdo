@@ -1,4 +1,4 @@
-module github.com/wealdtech/ethdo
+module github.com/0xtylerholmes/ethdo
 
 go 1.18
 
