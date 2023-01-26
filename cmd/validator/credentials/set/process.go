@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	gofuzz "github.com/google/gofuzz"
 	"os"
 	"regexp"
 	"strings"
@@ -44,6 +45,9 @@ var validatorPath = regexp.MustCompile("^m/12381/3600/[0-9]+/0/0$")
 var offlinePreparationFilename = "offline-preparation.json"
 var changeOperationsFilename = "change-operations.json"
 
+// the chances of mutating something are 1 / mutation_odds
+var mutation_odds = 5
+
 func (c *command) process(ctx context.Context) error {
 	if err := c.setup(ctx); err != nil {
 		return err
@@ -64,10 +68,10 @@ func (c *command) process(ctx context.Context) error {
 	if err := c.obtainOperations(ctx); err != nil {
 		return err
 	}
-
-	if validated, reason := c.validateOperations(ctx); !validated {
-		return fmt.Errorf("operation failed validation: %s", reason)
-	}
+	// no need to validate.
+	//if validated, reason := c.validateOperations(ctx); !validated {
+	//	return fmt.Errorf("operation failed validation: %s", reason)
+	//}
 
 	if c.json || c.offline {
 		if c.debug {
@@ -469,6 +473,7 @@ func (c *command) createSignedOperation(ctx context.Context,
 	*capella.SignedBLSToExecutionChange,
 	error,
 ) {
+
 	pubkey, err := util.BestPublicKey(withdrawalAccount)
 	if err != nil {
 		return nil, err
@@ -488,6 +493,7 @@ func (c *command) createSignedOperation(ctx context.Context,
 		FromBLSPubkey:      blsPubkey,
 		ToExecutionAddress: c.withdrawalAddress,
 	}
+
 	root, err := operation.HashTreeRoot()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to generate root for credentials change operation")
@@ -502,10 +508,32 @@ func (c *command) createSignedOperation(ctx context.Context,
 		return nil, errors.Wrap(err, "failed to sign credentials change operation")
 	}
 
-	return &capella.SignedBLSToExecutionChange{
+	bls_to_execution_change := capella.SignedBLSToExecutionChange{
 		Message:   operation,
 		Signature: signature,
-	}, nil
+	}
+
+	f := gofuzz.New().Funcs(
+		func(x *capella.SignedBLSToExecutionChange, c gofuzz.Continue) {
+			switch c.Intn(4 * mutation_odds) {
+			case 0:
+				c.Fuzz(&x.Message.ValidatorIndex)
+				break
+			case 1:
+				c.Fuzz(&x.Message.FromBLSPubkey)
+				break
+			case 3:
+				c.Fuzz(&x.Message.ToExecutionAddress)
+				break
+			case 4:
+				c.Fuzz(&x.Signature)
+				break
+			}
+		},
+	)
+
+	f.Fuzz(&bls_to_execution_change)
+	return &bls_to_execution_change, nil
 }
 
 func (c *command) parseWithdrawalAddress(_ context.Context) error {

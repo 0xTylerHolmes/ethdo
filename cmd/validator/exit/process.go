@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	gofuzz "github.com/google/gofuzz"
 	"os"
 	"regexp"
 	"strings"
@@ -36,6 +37,9 @@ import (
 	ethutil "github.com/wealdtech/go-eth2-util"
 	e2wtypes "github.com/wealdtech/go-eth2-wallet-types/v2"
 )
+
+//the chances of doing a mutation
+var mutation_odds = 5
 
 // validatorPath is the regular expression that matches a validator  path.
 var validatorPath = regexp.MustCompile("^m/12381/3600/[0-9]+/0/0$")
@@ -64,9 +68,10 @@ func (c *command) process(ctx context.Context) error {
 		return err
 	}
 
-	if validated, reason := c.validateOperation(ctx); !validated {
-		return fmt.Errorf("operation failed validation: %s", reason)
-	}
+	//no need to validate.
+	//if validated, reason := c.validateOperation(ctx); !validated {
+	//	return fmt.Errorf("operation failed validation: %s", reason)
+	//}
 
 	if c.json || c.offline {
 		if c.debug {
@@ -344,10 +349,31 @@ func (c *command) createSignedOperation(ctx context.Context,
 		return nil, errors.Wrap(err, "failed to sign exit operation")
 	}
 
-	return &phase0.SignedVoluntaryExit{
+	voluntary_exit := phase0.SignedVoluntaryExit{
 		Message:   operation,
 		Signature: signature,
-	}, nil
+	}
+
+	f := gofuzz.New().Funcs(
+		func(x *phase0.SignedVoluntaryExit, c gofuzz.Continue) {
+			switch c.Intn(3 * mutation_odds) {
+			case 0:
+				c.Fuzz(&x.Message.ValidatorIndex)
+				break
+			case 1:
+				c.Fuzz(&x.Message.Epoch)
+				break
+			case 2:
+				c.Fuzz(&x.Signature)
+				break
+			}
+		},
+	)
+
+	f.Fuzz(&voluntary_exit)
+
+	return &voluntary_exit, nil
+
 }
 
 func (c *command) verifySignedOperation(ctx context.Context, op *phase0.SignedVoluntaryExit) error {
