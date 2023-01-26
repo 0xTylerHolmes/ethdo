@@ -1,4 +1,4 @@
-module github.com/0xtylerholmes/ethdo
+module github.com/0xTylerHolmes/ethdo
 
 go 1.18
 
@@ -22,6 +22,7 @@ require (
 	github.com/spf13/viper v1.13.0
 	github.com/stretchr/testify v1.8.1
 	github.com/tyler-smith/go-bip39 v1.1.0
+	github.com/wealdtech/ethdo v1.27.1
 	github.com/wealdtech/go-bytesutil v1.2.0
 	github.com/wealdtech/go-ecodec v1.1.2
 	github.com/wealdtech/go-eth2-types/v2 v2.8.0
