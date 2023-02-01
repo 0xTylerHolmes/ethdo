@@ -19,14 +19,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	gofuzz "github.com/google/gofuzz"
-	"os"
-	"regexp"
-	"strings"
-
 	consensusclient "github.com/attestantio/go-eth2-client"
 	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	gofuzz "github.com/google/gofuzz"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-ssz"
 	"github.com/wealdtech/ethdo/beacon"
@@ -36,6 +32,9 @@ import (
 	e2types "github.com/wealdtech/go-eth2-types/v2"
 	ethutil "github.com/wealdtech/go-eth2-util"
 	e2wtypes "github.com/wealdtech/go-eth2-wallet-types/v2"
+	"os"
+	"regexp"
+	"strings"
 )
 
 //the chances of doing a mutation
@@ -354,7 +353,8 @@ func (c *command) createSignedOperation(ctx context.Context,
 		Signature: signature,
 	}
 
-	f := gofuzz.New().Funcs(
+	//fuzz the voluntary exit
+	msg_fuzz := gofuzz.New().Funcs(
 		func(x *phase0.SignedVoluntaryExit, c gofuzz.Continue) {
 			switch c.Intn(3 * mutation_odds) {
 			case 0:
@@ -370,7 +370,28 @@ func (c *command) createSignedOperation(ctx context.Context,
 		},
 	)
 
-	f.Fuzz(&voluntary_exit)
+	//sometimes fix the sig
+	sig_fuzz := gofuzz.New().Funcs(
+		func(x *phase0.SignedVoluntaryExit, f gofuzz.Continue) {
+			switch f.Intn(1) {
+			case 0:
+				//fix the sig
+				root, err := voluntary_exit.Message.HashTreeRoot()
+				if err != nil {
+					println("Exit::sig_fuzz Exception: failed to get HashTreeRoot")
+					break
+				}
+				sig, err := signing.SignRoot(ctx, account, nil, root, c.domain)
+				if err != nil {
+					println("Exit::sig_fuzz Exception: failed to sign the message.")
+				}
+				x.Signature = sig
+				break
+			}
+		},
+	)
+	msg_fuzz.Fuzz(&voluntary_exit)
+	sig_fuzz.Fuzz(&voluntary_exit)
 
 	return &voluntary_exit, nil
 

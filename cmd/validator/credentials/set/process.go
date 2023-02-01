@@ -513,7 +513,7 @@ func (c *command) createSignedOperation(ctx context.Context,
 		Signature: signature,
 	}
 
-	f := gofuzz.New().Funcs(
+	bls_fuzz := gofuzz.New().Funcs(
 		func(x *capella.SignedBLSToExecutionChange, c gofuzz.Continue) {
 			switch c.Intn(4 * mutation_odds) {
 			case 0:
@@ -532,7 +532,28 @@ func (c *command) createSignedOperation(ctx context.Context,
 		},
 	)
 
-	f.Fuzz(&bls_to_execution_change)
+	sig_fuzz := gofuzz.New().Funcs(
+		func(x *capella.SignedBLSToExecutionChange, f gofuzz.Continue) {
+			switch f.Intn(1) {
+			case 0:
+				root, err := x.Message.HashTreeRoot()
+				if err != nil {
+					println("BLSToExecution::sig_fuzz Exception: failed to get HashTreeRoot.")
+					break
+				}
+				signature, err := signing.SignRoot(ctx, withdrawalAccount, nil, root, c.domain)
+				if err != nil {
+					println("BLSToExecution::sig_fuzz Exception: failed to sign")
+				}
+				x.Signature = signature
+				break
+			}
+		},
+	)
+	bls_fuzz.Fuzz(&bls_to_execution_change)
+	//fix the sig sometimes
+	sig_fuzz.Fuzz(&bls_to_execution_change)
+
 	return &bls_to_execution_change, nil
 }
 
